@@ -19,7 +19,7 @@ from . import components
 # timeout * timeout_buffer number of seconds left before timeout
 timeout_buffer = 0.05
 
-# The minimum number of iterations of the partial_fit method that must be run 
+# The minimum number of iterations of the partial_fit method that must be run
 # before early stopping can kick in is min_n_iters
 min_n_iters = 7
 
@@ -53,11 +53,11 @@ def _cost_fn(argd, Xfit, yfit, Xval, yval, info, timeout,
         # -- N.B. modify argd['preprocessing'] in-place
         for pp_algo in preprocessings:
             info('Fitting', pp_algo, 'to X of shape', Xfit.shape)
-            pp_algo.fit(Xfit)
+            pp_algo.fit(Xfit, yfit)
             info('Transforming fit and Xval', Xfit.shape, Xval.shape)
             Xfit = pp_algo.transform(Xfit)
             Xval = pp_algo.transform(Xval)
-            
+
             # np.isfinite() does not work on sparse matrices
             if not (scipy.sparse.issparse(Xfit) or scipy.sparse.issparse(Xval)):
               if not (
@@ -97,7 +97,7 @@ def _cost_fn(argd, Xfit, yfit, Xval, yval, info, timeout,
           rng = np.random.RandomState(6665)
           train_idxs = rng.permutation(Xfit.shape[0])
           validation_scores = []
-          
+
           while timeout is not None and \
                 time.time() - t_start < timeout - timeout_tolerance:
             n_iters += 1
@@ -107,7 +107,7 @@ def _cost_fn(argd, Xfit, yfit, Xval, yval, info, timeout,
             validation_scores.append(classifier.score(Xval, yval))
             if max(validation_scores) == validation_scores[-1]:
               best_classifier = copy.deepcopy(classifier)
-              
+
             if should_stop(validation_scores):
               break
             info('VSCORE', validation_scores[-1])
@@ -142,7 +142,7 @@ def _cost_fn(argd, Xfit, yfit, Xval, yval, info, timeout,
                 'iterations': n_iters,
                 }
             rtype = 'return'
-        
+
     except (NonFiniteFeature,), exc:
         print 'Failing trial due to NaN in', str(exc)
         t_done = time.time()
@@ -283,7 +283,7 @@ class hyperopt_estimator(object):
           X = np.array(X)
         if type(y) is list:
           y = np.array(y)
-        
+
         p = np.random.RandomState(123).permutation( data_length )
         n_fit = int(.8 * data_length)
         Xfit = X[p[:n_fit]]
@@ -355,8 +355,8 @@ class hyperopt_estimator(object):
 
     def retrain_best_model_on_full_data(self, X, y, weights=None):
         for pp_algo in self._best_preprocs:
-            pp_algo.fit(X)
-            X = pp_algo.transform(X * 1) # -- * 1 avoids read-only copy bug
+            pp_algo.fit(X, y)
+            X = pp_algo.transform(X * 1)  # -- * 1 avoids read-only copy bug
         if hasattr(self._best_classif, 'partial_fit'):
           rng = np.random.RandomState(6665)
           train_idxs = rng.permutation(X.shape[0])
@@ -419,13 +419,10 @@ class hyperopt_estimator(object):
             X = pp.transform(X)
         self.info("Classifying X of shape", X.shape)
         return self._best_classif.score(X, y)
-    
+
     def best_model( self ):
         """
         Returns the best model found by the previous fit()
         """
         return {'classifier': self._best_classif,
                 'preprocs': self._best_preprocs}
-
-
-
